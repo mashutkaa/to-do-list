@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-primary-light: #f3e8ff;
+
+  --color-app-bg: #f8f9fc;
+  --color-card-bg: #ffffff;
+
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+
+  --radius-card: 1.25rem;
+  --radius-button: 0.875rem;
+  --radius-input: 0.75rem;
+
+  --color-status-low: #10b981;
+  --color-status-low-bg: #d1fae5;
+  --color-status-medium: #f59e0b;
+  --color-status-medium-bg: #fef3c7;
+  --color-status-high: #ef4444;
+  --color-status-high-bg: #fee2e2;
+}
+
+@layer base {
+  html {
+    min-width: 320px;
+    background-color: var(--color-app-bg);
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background-color: var(--color-app-bg);
+    color: var(--color-text-main);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: page-fade-in 280ms ease-out;
+}
+
+@keyframes auth-form-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-form-transition {
+  animation: auth-form-fade-in 220ms ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
