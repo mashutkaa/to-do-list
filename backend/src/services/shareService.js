@@ -152,11 +152,14 @@ export const getTasksSharedWithUser = async (userEmail) => {
       title: true,
       description: true,
       status: true,
+      priority: true,
+      deadline: true,
       createdAt: true,
       user: {
         select: {
           id: true,
           email: true,
+          name: true,
         },
       },
       shares: {
@@ -165,6 +168,8 @@ export const getTasksSharedWithUser = async (userEmail) => {
           id: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
       },
     },
     orderBy: { createdAt: 'desc' },

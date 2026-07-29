@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  Inbox,
   ListChecks,
   LogOut,
   Plus,
@@ -10,10 +11,16 @@ import { useNavigate } from 'react-router-dom';
 
 import CreateTaskModal from '../components/CreateTaskModal.jsx';
 import ShareTaskModal from '../components/ShareTaskModal.jsx';
+import SharedTaskCard from '../components/SharedTaskCard.jsx';
 import TaskCard from '../components/TaskCard.jsx';
 import Toast from '../components/Toast.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../services/api.js';
+
+const listViews = [
+  { value: 'mine', label: 'Мої задачі' },
+  { value: 'shared', label: 'Зі мною' },
+];
 
 const filters = [
   { value: 'ALL', label: 'Всі' },
@@ -154,28 +161,56 @@ function ProfileMenu({ user, onLogout }) {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [listView, setListView] = useState('mine');
   const [tasks, setTasks] = useState([]);
+  const [sharedTasks, setSharedTasks] = useState([]);
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('deadline');
   const [sortDirection, setSortDirection] = useState('asc');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSharedLoading, setIsSharedLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingIds, setUpdatingIds] = useState(new Set());
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [notice, setNotice] = useState('');
 
+  const isSharedView = listView === 'shared';
+
+  const loadSharedTasks = async () => {
+    setIsSharedLoading(true);
+
+    try {
+      const sharedResponse = await api.get('/tasks/shared-with-me');
+      setSharedTasks(sharedResponse.data.tasks ?? []);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setIsSharedLoading(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
     const loadTasks = async () => {
       try {
-        const response = await api.get('/tasks');
-        if (active) setTasks(response.data.tasks ?? []);
+        const [ownResponse, sharedResponse] = await Promise.all([
+          api.get('/tasks'),
+          api.get('/tasks/shared-with-me'),
+        ]);
+
+        if (!active) return;
+
+        setTasks(ownResponse.data.tasks ?? []);
+        setSharedTasks(sharedResponse.data.tasks ?? []);
       } catch (requestError) {
         if (active) setError(getErrorMessage(requestError));
       } finally {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+          setIsSharedLoading(false);
+        }
       }
     };
 
@@ -186,22 +221,26 @@ export default function DashboardPage() {
     };
   }, []);
 
+  const sourceTasks = isSharedView ? sharedTasks : tasks;
+
   const counts = useMemo(
     () => ({
-      ALL: tasks.length,
-      PENDING: tasks.filter((task) => task.status === 'PENDING').length,
-      IN_PROGRESS: tasks.filter((task) => task.status === 'IN_PROGRESS').length,
-      COMPLETED: tasks.filter((task) => task.status === 'COMPLETED').length,
+      ALL: sourceTasks.length,
+      PENDING: sourceTasks.filter((task) => task.status === 'PENDING').length,
+      IN_PROGRESS: sourceTasks.filter((task) => task.status === 'IN_PROGRESS')
+        .length,
+      COMPLETED: sourceTasks.filter((task) => task.status === 'COMPLETED')
+        .length,
     }),
-    [tasks],
+    [sourceTasks],
   );
 
   const filteredTasks = useMemo(
     () =>
       activeFilter === 'ALL'
-        ? tasks
-        : tasks.filter((task) => task.status === activeFilter),
-    [activeFilter, tasks],
+        ? sourceTasks
+        : sourceTasks.filter((task) => task.status === activeFilter),
+    [activeFilter, sourceTasks],
   );
 
   const visibleTasks = useMemo(
@@ -209,8 +248,13 @@ export default function DashboardPage() {
     [filteredTasks, sortBy, sortDirection],
   );
 
-  const progress = counts.ALL
-    ? Math.round((counts.COMPLETED / counts.ALL) * 100)
+  const listLoading = isSharedView ? isSharedLoading : isLoading;
+
+  const ownCompletedCount = tasks.filter(
+    (task) => task.status === 'COMPLETED',
+  ).length;
+  const progress = tasks.length
+    ? Math.round((ownCompletedCount / tasks.length) * 100)
     : 0;
 
   const today = new Intl.DateTimeFormat('uk-UA', {
@@ -291,6 +335,17 @@ export default function DashboardPage() {
     setActiveFilter(filterValue);
   };
 
+  const handleListViewChange = (view) => {
+    setListView(view);
+    setActiveFilter('ALL');
+    setSortDirection('asc');
+    setError('');
+
+    if (view === 'shared') {
+      loadSharedTasks();
+    }
+  };
+
   const handleSortChange = (event) => {
     setSortBy(event.target.value);
     setSortDirection('asc');
@@ -348,57 +403,107 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <section className="mb-5 rounded-card bg-card-bg p-5 shadow-[0_10px_30px_rgba(15,23,42,0.07)] sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-bold text-text-main">Прогрес сьогодні</h2>
-              <p className="mt-0.5 text-xs text-text-muted">
-                {progress}% задач виконано
-              </p>
-            </div>
-            <span className="rounded-full bg-primary-light px-3 py-1 text-sm font-bold text-primary">
-              {progress}%
-            </span>
-          </div>
+        <nav
+          className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100/90 p-1"
+          aria-label="Список задач"
+        >
+          {listViews.map((view) => {
+            const count =
+              view.value === 'mine' ? tasks.length : sharedTasks.length;
+            const isActive = listView === view.value;
 
-          <div
-            className="mb-4 h-2 overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-label="Прогрес виконання задач"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow={progress}
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {[
-              ['Всього', counts.ALL, 'bg-slate-50 text-text-main'],
-              [
-                'В процесі',
-                counts.IN_PROGRESS,
-                'bg-status-medium-bg/55 text-status-medium',
-              ],
-              [
-                'Виконано',
-                counts.COMPLETED,
-                'bg-status-low-bg/55 text-status-low',
-              ],
-            ].map(([label, value, className]) => (
-              <div
-                key={label}
-                className={`rounded-xl px-2 py-3 text-center ${className}`}
+            return (
+              <button
+                key={view.value}
+                type="button"
+                onClick={() => handleListViewChange(view.value)}
+                aria-pressed={isActive}
+                className={`flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold transition ${
+                  isActive
+                    ? 'bg-white text-text-main shadow-sm'
+                    : 'text-text-muted hover:text-text-main'
+                }`}
               >
-                <p className="text-[11px] font-medium sm:text-xs">{label}</p>
-                <p className="mt-0.5 text-lg font-extrabold">{value}</p>
+                {view.value === 'shared' ? (
+                  <Inbox size={16} aria-hidden="true" />
+                ) : (
+                  <ListChecks size={16} aria-hidden="true" />
+                )}
+                <span>{view.label}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    isActive
+                      ? 'bg-primary-light text-primary'
+                      : 'bg-white/70 text-text-muted'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {!isSharedView && (
+          <section className="mb-5 rounded-card bg-card-bg p-5 shadow-[0_10px_30px_rgba(15,23,42,0.07)] sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-text-main">Прогрес сьогодні</h2>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {progress}% задач виконано
+                </p>
               </div>
-            ))}
-          </div>
-        </section>
+              <span className="rounded-full bg-primary-light px-3 py-1 text-sm font-bold text-primary">
+                {progress}%
+              </span>
+            </div>
+
+            <div
+              className="mb-4 h-2 overflow-hidden rounded-full bg-slate-100"
+              role="progressbar"
+              aria-label="Прогрес виконання задач"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={progress}
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {[
+                ['Всього', tasks.length, 'bg-slate-50 text-text-main'],
+                [
+                  'В процесі',
+                  tasks.filter((task) => task.status === 'IN_PROGRESS').length,
+                  'bg-status-medium-bg/55 text-status-medium',
+                ],
+                [
+                  'Виконано',
+                  ownCompletedCount,
+                  'bg-status-low-bg/55 text-status-low',
+                ],
+              ].map(([label, value, className]) => (
+                <div
+                  key={label}
+                  className={`rounded-xl px-2 py-3 text-center ${className}`}
+                >
+                  <p className="text-[11px] font-medium sm:text-xs">{label}</p>
+                  <p className="mt-0.5 text-lg font-extrabold">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {isSharedView && (
+          <section className="mb-5 rounded-card border border-primary-light bg-primary-light/40 px-4 py-3 text-sm text-text-muted sm:px-5">
+            Тут задачі, якими з вами поділилися. Перегляд лише для читання —
+            змінювати їх може лише власник.
+          </section>
+        )}
 
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <nav
@@ -449,7 +554,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {isLoading ? (
+        {listLoading ? (
           <div className="space-y-3" aria-label="Завантаження задач">
             {[1, 2, 3].map((item) => (
               <div
@@ -459,28 +564,51 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : visibleTasks.length ? (
-          <section className="space-y-3" aria-label="Список задач">
-            {visibleTasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDelete}
-                onTaskUpdated={handleTaskUpdated}
-                isUpdating={updatingIds.has(task.id)}
-              />
-            ))}
+          <section
+            className="space-y-3"
+            aria-label={
+              isSharedView ? 'Задачі, якими поділилися зі мною' : 'Список задач'
+            }
+          >
+            {visibleTasks.map((task) =>
+              isSharedView ? (
+                <SharedTaskCard key={task.id} task={task} />
+              ) : (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onStatusChange={handleStatusChange}
+                  onDelete={handleDelete}
+                  onTaskUpdated={handleTaskUpdated}
+                  isUpdating={updatingIds.has(task.id)}
+                />
+              ),
+            )}
           </section>
         ) : (
           <section className="rounded-card border border-dashed border-slate-200 bg-white/70 px-6 py-12 text-center">
-            <ListChecks
-              size={32}
-              className="mx-auto text-primary/50"
-              aria-hidden="true"
-            />
-            <h2 className="mt-3 font-bold text-text-main">Задач поки немає</h2>
+            {isSharedView ? (
+              <Inbox
+                size={32}
+                className="mx-auto text-primary/50"
+                aria-hidden="true"
+              />
+            ) : (
+              <ListChecks
+                size={32}
+                className="mx-auto text-primary/50"
+                aria-hidden="true"
+              />
+            )}
+            <h2 className="mt-3 font-bold text-text-main">
+              {isSharedView
+                ? 'Поки ніхто не поділився задачами'
+                : 'Задач поки немає'}
+            </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Створіть нову задачу або оберіть інший фільтр.
+              {isSharedView
+                ? 'Коли хтось надішле вам задачі на ваш email, вони з’являться тут.'
+                : 'Створіть нову задачу або оберіть інший фільтр.'}
             </p>
           </section>
         )}
