@@ -9,6 +9,14 @@ const getErrorMessage = (error) =>
   error.response?.data?.message ||
   'Не вдалося поділитися задачами. Спробуйте ще раз.';
 
+/**
+ * @param {{
+ *   isOpen: boolean,
+ *   onClose: () => void,
+ *   tasks?: Array<{ id: string, title: string }>,
+ *   onShared?: (result: unknown) => void | Promise<void>,
+ * }} props
+ */
 export default function ShareTaskModal({
   isOpen,
   onClose,
