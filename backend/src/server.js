@@ -2,11 +2,26 @@ import 'dotenv/config';
 
 import app from './app.js';
 import prisma from './config/db.js';
+import { describeMailConfig } from './services/mailService.js';
+import { createLogger } from './utils/logger.js';
 
+const logger = createLogger('server');
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  const mailConfig = describeMailConfig();
+
+  logger.info('Server started', { port: PORT, env: process.env.NODE_ENV });
+
+  if (mailConfig.ready) {
+    logger.info('Email is configured', { sender: mailConfig.sender });
+  } else {
+    logger.warn('Email is NOT configured — sharing will work without emails', {
+      apiKeyPresent: mailConfig.apiKeyPresent,
+      apiKeyLength: mailConfig.apiKeyLength,
+      sender: mailConfig.sender,
+    });
+  }
 });
 
 const shutdown = (signal) => {

@@ -27,6 +27,8 @@ describe('sendTaskShareEmail', () => {
     });
 
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -128,7 +130,10 @@ describe('sendTaskShareEmail', () => {
 
     expect(result).toBe(false);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('HTTP 401'),
+      expect.stringContaining('status=401'),
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Key not found'),
     );
   });
 

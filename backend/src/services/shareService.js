@@ -1,5 +1,8 @@
 import prisma from '../config/db.js';
+import { createLogger, maskEmail } from '../utils/logger.js';
 import { sendTaskShareEmail } from './mailService.js';
+
+const logger = createLogger('share');
 
 const createOperationalError = (message, statusCode) => {
   const error = new Error(message);
@@ -19,6 +22,9 @@ const assertShareCooldown = async (userId) => {
   });
 
   if (!user) {
+    logger.error('Share rejected: authenticated user no longer exists', {
+      userId,
+    });
     throw createOperationalError('Authenticated user no longer exists', 401);
   }
 
@@ -33,6 +39,13 @@ const assertShareCooldown = async (userId) => {
       1,
       Math.ceil((SHARE_COOLDOWN_MS - elapsedMs) / 60000),
     );
+
+    logger.warn('Share rejected: cooldown is still active', {
+      userId,
+      elapsedMs,
+      cooldownMs: SHARE_COOLDOWN_MS,
+      remainingMinutes,
+    });
 
     throw createOperationalError(
       `Поділитися задачами можна не частіше, ніж раз на 5 хвилин. Зачекайте ще приблизно ${remainingMinutes} хв.`,
@@ -55,7 +68,15 @@ export const shareTasks = async (taskIds, userId, targetEmail) => {
   const normalizedTargetEmail = normalizeEmail(targetEmail);
   const uniqueTaskIds = [...new Set(taskIds)];
 
+  logger.info('Share requested', {
+    userId,
+    target: maskEmail(normalizedTargetEmail),
+    requestedTasks: taskIds.length,
+    uniqueTasks: uniqueTaskIds.length,
+  });
+
   if (!uniqueTaskIds.length) {
+    logger.warn('Share rejected: empty task list', { userId });
     throw createOperationalError('Оберіть хоча б одну задачу для шерингу', 400);
   }
 
@@ -80,6 +101,12 @@ export const shareTasks = async (taskIds, userId, targetEmail) => {
   });
 
   if (tasks.length !== uniqueTaskIds.length) {
+    logger.warn('Share rejected: some tasks are missing or not owned', {
+      userId,
+      requestedTasks: uniqueTaskIds.length,
+      ownedTasks: tasks.length,
+    });
+
     throw createOperationalError(
       'Деякі задачі не знайдено або вам не належать',
       403,
@@ -126,6 +153,14 @@ export const shareTasks = async (taskIds, userId, targetEmail) => {
     orderBy: { createdAt: 'desc' },
   });
 
+  logger.info('Share records persisted', {
+    userId,
+    target: maskEmail(normalizedTargetEmail),
+    createdShares: newTasks.length,
+    alreadyShared: alreadySharedIds.size,
+    recipientIsRegistered: Boolean(targetUser),
+  });
+
   const senderEmail = tasks[0].user.email;
   const emailWasSent = await sendTaskShareEmail(
     normalizedTargetEmail,
@@ -138,6 +173,11 @@ export const shareTasks = async (taskIds, userId, targetEmail) => {
       where: { id: userId },
       data: { lastSharedAt: new Date() },
     });
+  } else {
+    logger.warn(
+      'Share completed without email — recipient sees tasks in app only',
+      { userId, target: maskEmail(normalizedTargetEmail) },
+    );
   }
 
   return { shares, emailWasSent };

@@ -1,4 +1,8 @@
-const errorMiddleware = (error, _request, response, _next) => {
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('http');
+
+const errorMiddleware = (error, request, response, _next) => {
   if (response.headersSent) {
     return;
   }
@@ -7,8 +11,18 @@ const errorMiddleware = (error, _request, response, _next) => {
     ? (error.statusCode ?? error.status ?? 400)
     : 500;
 
-  if (!error.isOperational) {
-    console.error('Unhandled request error:', error);
+  const context = {
+    method: request.method,
+    url: request.originalUrl,
+    status: statusCode,
+    userId: request.user?.id,
+  };
+
+  if (error.isOperational) {
+    logger.warn(`Request rejected: ${error.message}`, context);
+  } else {
+    logger.error(`Unhandled request error: ${error.message}`, context);
+    console.error(error);
   }
 
   response.status(statusCode).json({

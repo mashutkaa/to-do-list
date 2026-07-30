@@ -1,3 +1,7 @@
+import { createLogger, maskEmail } from '../utils/logger.js';
+
+const logger = createLogger('mail');
+
 const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
 // Hosting providers commonly block outbound SMTP ports, so email goes over HTTPS.
@@ -104,25 +108,40 @@ const resolveSender = () => {
   return null;
 };
 
+export const describeMailConfig = () => {
+  const apiKey = process.env.BREVO_API_KEY?.trim();
+  const sender = resolveSender();
+
+  return {
+    apiKeyPresent: Boolean(apiKey),
+    apiKeyLength: apiKey?.length ?? 0,
+    sender: sender ? maskEmail(sender.email) : '<none>',
+    ready: Boolean(apiKey && sender),
+  };
+};
+
 export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
   const taskList = Array.isArray(tasks) ? tasks : [tasks];
+  const recipient = maskEmail(targetEmail);
 
   if (!taskList.length) {
+    logger.warn('Email skipped: empty task list', { to: recipient });
     return false;
   }
 
   const apiKey = process.env.BREVO_API_KEY?.trim();
 
   if (!apiKey) {
-    console.error('[mail] BREVO_API_KEY is not set — email was not sent');
+    logger.error('Email skipped: BREVO_API_KEY is not set', { to: recipient });
     return false;
   }
 
   const sender = resolveSender();
 
   if (!sender) {
-    console.error(
-      '[mail] Sender is not configured — set MAIL_FROM_EMAIL (verified in Brevo)',
+    logger.error(
+      'Email skipped: sender is not configured — set MAIL_FROM_EMAIL (verified in Brevo)',
+      { to: recipient },
     );
     return false;
   }
@@ -169,6 +188,14 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
       `,
   };
 
+  const startedAt = Date.now();
+
+  logger.info('Sending task-share email via Brevo API', {
+    to: recipient,
+    from: maskEmail(sender.email),
+    tasks: taskCount,
+  });
+
   try {
     const response = await fetch(BREVO_ENDPOINT, {
       method: 'POST',
@@ -181,24 +208,41 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
+    const durationMs = Date.now() - startedAt;
+
     if (!response.ok) {
       const details = await response.text().catch(() => '');
-      console.error(
-        `[mail] Brevo rejected the email to ${targetEmail} (HTTP ${response.status}): ${details}`,
-      );
+
+      logger.error('Brevo rejected the email', {
+        to: recipient,
+        status: response.status,
+        durationMs,
+        details: details.slice(0, 500) || '<empty body>',
+      });
+
       return false;
     }
 
+    logger.info('Email accepted by Brevo', {
+      to: recipient,
+      status: response.status,
+      durationMs,
+    });
+
     return true;
   } catch (error) {
-    const reason =
-      error.name === 'TimeoutError'
-        ? `request timed out after ${REQUEST_TIMEOUT_MS} ms`
-        : `${error.name}: ${error.message}`;
+    const durationMs = Date.now() - startedAt;
+    const timedOut = error.name === 'TimeoutError';
 
-    console.error(
-      `[mail] Unable to send task-share email to ${targetEmail}: ${reason}`,
-    );
+    logger.error('Unable to reach the Brevo API', {
+      to: recipient,
+      durationMs,
+      reason: timedOut
+        ? `request timed out after ${REQUEST_TIMEOUT_MS} ms`
+        : `${error.name}: ${error.message}`,
+      cause: error.cause?.code ?? error.cause?.message,
+    });
+
     return false;
   }
 };

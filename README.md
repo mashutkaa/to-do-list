@@ -178,6 +178,7 @@ POST /api/tasks/share
 | --- | --- |
 | `npm run dev` | Розробка з nodemon |
 | `npm start` | Продакшен-запуск |
+| `npm run mail:check` | Діагностика пошти: перевіряє конфіг і доступ до Brevo API |
 | `npm test` | Інтеграційні тести |
 | `npx prisma db push` | Синхронізація схеми з БД |
 | `npx prisma generate` | Оновлення Prisma Client |
