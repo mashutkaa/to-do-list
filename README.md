@@ -146,6 +146,9 @@ npm run dev
 
 Відкрийте `http://localhost:5173` у браузері.
 
+> Для деплою SPA на Vercel потрібен `frontend/vercel.json` з rewrite усіх шляхів на
+> `/index.html` — інакше прямий вхід на `/auth` чи `/auth/reset-password` дасть `404`.
+
 ---
 
 ## Відновлення пароля
