@@ -42,8 +42,13 @@ const assertShareCooldown = async (userId) => {
 };
 
 export const shareTask = async (taskId, userId, targetEmail) => {
-  const shares = await shareTasks([taskId], userId, targetEmail);
-  return shares[0];
+  const { shares, emailWasSent } = await shareTasks(
+    [taskId],
+    userId,
+    targetEmail,
+  );
+
+  return { share: shares[0], emailWasSent };
 };
 
 export const shareTasks = async (taskIds, userId, targetEmail) => {
@@ -135,7 +140,7 @@ export const shareTasks = async (taskIds, userId, targetEmail) => {
     });
   }
 
-  return shares;
+  return { shares, emailWasSent };
 };
 
 export const getTasksSharedWithUser = async (userEmail) => {

@@ -29,13 +29,13 @@ const resolveTargetEmail = (body) => {
 export const createTaskShare = async (request, response, next) => {
   try {
     const targetEmail = resolveTargetEmail(request.body);
-    const share = await shareTask(
+    const { share, emailWasSent } = await shareTask(
       request.params.id,
       request.user.id,
       targetEmail,
     );
 
-    return response.status(201).json({ share });
+    return response.status(201).json({ share, emailSent: emailWasSent });
   } catch (error) {
     return next(error);
   }
@@ -54,11 +54,16 @@ export const createBulkTaskShare = async (request, response, next) => {
     }
 
     const targetEmail = resolveTargetEmail(request.body);
-    const shares = await shareTasks(taskIds, request.user.id, targetEmail);
+    const { shares, emailWasSent } = await shareTasks(
+      taskIds,
+      request.user.id,
+      targetEmail,
+    );
 
     return response.status(201).json({
       shares,
       count: shares.length,
+      emailSent: emailWasSent,
     });
   } catch (error) {
     return next(error);

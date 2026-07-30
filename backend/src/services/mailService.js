@@ -1,16 +1,7 @@
-import nodemailer from 'nodemailer';
+const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
 
-const smtpPort = Number.parseInt(process.env.SMTP_PORT || '587', 10);
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: smtpPort,
-  secure: smtpPort === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Hosting providers commonly block outbound SMTP ports, so email goes over HTTPS.
+const REQUEST_TIMEOUT_MS = 10_000;
 
 const STATUS_LABELS = {
   PENDING: 'До виконання',
@@ -87,6 +78,32 @@ const renderTaskHtml = (task) => {
   `;
 };
 
+// Accepts either MAIL_FROM_EMAIL/MAIL_FROM_NAME or the legacy `Name <email>` form.
+const resolveSender = () => {
+  const explicitEmail = process.env.MAIL_FROM_EMAIL?.trim();
+  const explicitName = process.env.MAIL_FROM_NAME?.trim();
+
+  if (explicitEmail) {
+    return { email: explicitEmail, name: explicitName || 'To-Do App' };
+  }
+
+  const legacyFrom = process.env.SMTP_FROM?.trim();
+
+  if (!legacyFrom) return null;
+
+  const match = legacyFrom.match(/^(?:"?([^"<]*?)"?\s*)?<([^<>@\s]+@[^<>\s]+)>$/);
+
+  if (match) {
+    return { email: match[2], name: (match[1] || explicitName || 'To-Do App').trim() };
+  }
+
+  if (legacyFrom.includes('@')) {
+    return { email: legacyFrom, name: explicitName || 'To-Do App' };
+  }
+
+  return null;
+};
+
 export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
   const taskList = Array.isArray(tasks) ? tasks : [tasks];
 
@@ -94,34 +111,50 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
     return false;
   }
 
-  try {
-    const safeSenderEmail = escapeHtml(senderEmail);
-    const taskCount = taskList.length;
-    const subject =
-      taskCount === 1
-        ? `[To-Do App] З вами поділилися задачею: "${taskList[0].title}"`
-        : `[To-Do App] З вами поділилися задачами (${taskCount})`;
+  const apiKey = process.env.BREVO_API_KEY?.trim();
 
-    const introText =
-      taskCount === 1
-        ? `Користувач ${senderEmail} поділився(-лася) з вами задачею.`
-        : `Користувач ${senderEmail} поділився(-лася) з вами ${taskCount} задачами.`;
+  if (!apiKey) {
+    console.error('[mail] BREVO_API_KEY is not set — email was not sent');
+    return false;
+  }
 
-    const introHtml =
-      taskCount === 1
-        ? `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами задачею.`
-        : `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами <strong>${taskCount}</strong> задачами.`;
+  const sender = resolveSender();
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: targetEmail,
-      subject,
-      text: [
-        introText,
-        '',
-        ...taskList.map((task, index) => renderTaskText(task, index)),
-      ].join('\n'),
-      html: `
+  if (!sender) {
+    console.error(
+      '[mail] Sender is not configured — set MAIL_FROM_EMAIL (verified in Brevo)',
+    );
+    return false;
+  }
+
+  const safeSenderEmail = escapeHtml(senderEmail);
+  const taskCount = taskList.length;
+  const subject =
+    taskCount === 1
+      ? `[To-Do App] З вами поділилися задачею: "${taskList[0].title}"`
+      : `[To-Do App] З вами поділилися задачами (${taskCount})`;
+
+  const introText =
+    taskCount === 1
+      ? `Користувач ${senderEmail} поділився(-лася) з вами задачею.`
+      : `Користувач ${senderEmail} поділився(-лася) з вами ${taskCount} задачами.`;
+
+  const introHtml =
+    taskCount === 1
+      ? `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами задачею.`
+      : `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами <strong>${taskCount}</strong> задачами.`;
+
+  const payload = {
+    sender,
+    to: [{ email: targetEmail }],
+    replyTo: senderEmail ? { email: senderEmail } : undefined,
+    subject,
+    textContent: [
+      introText,
+      '',
+      ...taskList.map((task, index) => renderTaskText(task, index)),
+    ].join('\n'),
+    htmlContent: `
         <div style="background:#f4f7fb;padding:40px 16px;font-family:Arial,sans-serif;color:#172033">
           <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(23,32,51,.08)">
             <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:18px">
@@ -134,13 +167,37 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
           </div>
         </div>
       `,
+  };
+
+  try {
+    const response = await fetch(BREVO_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => '');
+      console.error(
+        `[mail] Brevo rejected the email to ${targetEmail} (HTTP ${response.status}): ${details}`,
+      );
+      return false;
+    }
 
     return true;
   } catch (error) {
+    const reason =
+      error.name === 'TimeoutError'
+        ? `request timed out after ${REQUEST_TIMEOUT_MS} ms`
+        : `${error.name}: ${error.message}`;
+
     console.error(
-      `[mail] Unable to send task-share email to ${targetEmail}:`,
-      error.message,
+      `[mail] Unable to send task-share email to ${targetEmail}: ${reason}`,
     );
     return false;
   }

@@ -1,12 +1,29 @@
-import { CheckCircle2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+
+const variantConfig = {
+  success: {
+    Icon: CheckCircle2,
+    borderClassName: 'border-status-low/20',
+    iconClassName: 'bg-status-low-bg text-status-low',
+  },
+  warning: {
+    Icon: AlertTriangle,
+    borderClassName: 'border-status-medium/30',
+    iconClassName: 'bg-status-medium-bg text-status-medium',
+  },
+};
 
 export default function Toast({
   message,
   onClose,
   duration = 3500,
+  variant = 'success',
 }) {
+  const { Icon, borderClassName, iconClassName } =
+    variantConfig[variant] ?? variantConfig.success;
+
   useEffect(() => {
     if (!message) return undefined;
 
@@ -22,9 +39,13 @@ export default function Toast({
       role="status"
       aria-live="polite"
     >
-      <div className="pointer-events-auto flex w-full max-w-sm animate-[toast-in_0.28s_ease-out] items-start gap-3 rounded-xl border border-status-low/20 bg-card-bg px-4 py-3.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)]">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-status-low-bg text-status-low">
-          <CheckCircle2 size={18} aria-hidden="true" />
+      <div
+        className={`pointer-events-auto flex w-full max-w-sm animate-[toast-in_0.28s_ease-out] items-start gap-3 rounded-xl border bg-card-bg px-4 py-3.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)] ${borderClassName}`}
+      >
+        <span
+          className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${iconClassName}`}
+        >
+          <Icon size={18} aria-hidden="true" />
         </span>
         <p className="min-w-0 flex-1 pt-1 text-sm font-semibold text-text-main">
           {message}

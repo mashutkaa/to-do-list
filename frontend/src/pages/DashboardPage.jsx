@@ -174,6 +174,7 @@ export default function DashboardPage() {
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [noticeVariant, setNoticeVariant] = useState('success');
 
   const isSharedView = listView === 'shared';
 
@@ -303,9 +304,14 @@ export default function DashboardPage() {
     }
   };
 
+  const showNotice = (message, variant = 'success') => {
+    setNoticeVariant(variant);
+    setNotice(message);
+  };
+
   const handleTaskCreated = (task) => {
     setTasks((current) => [task, ...current]);
-    setNotice('Нову задачу створено');
+    showNotice('Нову задачу створено');
   };
 
   const handleTaskUpdated = (updatedTask) => {
@@ -314,15 +320,22 @@ export default function DashboardPage() {
         task.id === updatedTask.id ? updatedTask : task,
       ),
     );
-    setNotice('Задачу успішно оновлено!');
+    showNotice('Задачу успішно оновлено!');
   };
 
   const handleShared = (result) => {
     const count = result?.count ?? 1;
-    setNotice(
-      count > 1
-        ? `Успішно надіслано задач: ${count}`
-        : 'Успішно надіслано!',
+
+    if (result?.emailSent === false) {
+      showNotice(
+        'Задачі доступні отримувачу в застосунку, але лист не надіслано — перевірте налаштування пошти.',
+        'warning',
+      );
+      return;
+    }
+
+    showNotice(
+      count > 1 ? `Успішно надіслано задач: ${count}` : 'Успішно надіслано!',
     );
   };
 
@@ -627,7 +640,11 @@ export default function DashboardPage() {
         onShared={handleShared}
       />
 
-      <Toast message={notice} onClose={() => setNotice('')} />
+      <Toast
+        message={notice}
+        variant={noticeVariant}
+        onClose={() => setNotice('')}
+      />
     </main>
   );
 }
