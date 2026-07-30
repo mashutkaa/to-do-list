@@ -120,19 +120,22 @@ export const describeMailConfig = () => {
   };
 };
 
-export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
-  const taskList = Array.isArray(tasks) ? tasks : [tasks];
-  const recipient = maskEmail(targetEmail);
-
-  if (!taskList.length) {
-    logger.warn('Email skipped: empty task list', { to: recipient });
-    return false;
-  }
-
+const sendBrevoEmail = async ({
+  to,
+  subject,
+  textContent,
+  htmlContent,
+  replyTo,
+  purpose,
+}) => {
+  const recipient = maskEmail(to);
   const apiKey = process.env.BREVO_API_KEY?.trim();
 
   if (!apiKey) {
-    logger.error('Email skipped: BREVO_API_KEY is not set', { to: recipient });
+    logger.error('Email skipped: BREVO_API_KEY is not set', {
+      to: recipient,
+      purpose,
+    });
     return false;
   }
 
@@ -141,59 +144,26 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
   if (!sender) {
     logger.error(
       'Email skipped: sender is not configured — set MAIL_FROM_EMAIL (verified in Brevo)',
-      { to: recipient },
+      { to: recipient, purpose },
     );
     return false;
   }
 
-  const safeSenderEmail = escapeHtml(senderEmail);
-  const taskCount = taskList.length;
-  const subject =
-    taskCount === 1
-      ? `[To-Do App] З вами поділилися задачею: "${taskList[0].title}"`
-      : `[To-Do App] З вами поділилися задачами (${taskCount})`;
-
-  const introText =
-    taskCount === 1
-      ? `Користувач ${senderEmail} поділився(-лася) з вами задачею.`
-      : `Користувач ${senderEmail} поділився(-лася) з вами ${taskCount} задачами.`;
-
-  const introHtml =
-    taskCount === 1
-      ? `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами задачею.`
-      : `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами <strong>${taskCount}</strong> задачами.`;
-
   const payload = {
     sender,
-    to: [{ email: targetEmail }],
-    replyTo: senderEmail ? { email: senderEmail } : undefined,
+    to: [{ email: to }],
+    replyTo: replyTo ? { email: replyTo } : undefined,
     subject,
-    textContent: [
-      introText,
-      '',
-      ...taskList.map((task, index) => renderTaskText(task, index)),
-    ].join('\n'),
-    htmlContent: `
-        <div style="background:#f4f7fb;padding:40px 16px;font-family:Arial,sans-serif;color:#172033">
-          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(23,32,51,.08)">
-            <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:18px">
-              To-Do App
-            </div>
-            <p style="font-size:16px;line-height:1.6;margin:0 0 24px;color:#526078">
-              ${introHtml}
-            </p>
-            ${taskList.map((task) => renderTaskHtml(task)).join('')}
-          </div>
-        </div>
-      `,
+    textContent,
+    htmlContent,
   };
 
   const startedAt = Date.now();
 
-  logger.info('Sending task-share email via Brevo API', {
+  logger.info('Sending email via Brevo API', {
     to: recipient,
     from: maskEmail(sender.email),
-    tasks: taskCount,
+    purpose,
   });
 
   try {
@@ -215,6 +185,7 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
 
       logger.error('Brevo rejected the email', {
         to: recipient,
+        purpose,
         status: response.status,
         durationMs,
         details: details.slice(0, 500) || '<empty body>',
@@ -225,6 +196,7 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
 
     logger.info('Email accepted by Brevo', {
       to: recipient,
+      purpose,
       status: response.status,
       durationMs,
     });
@@ -236,6 +208,7 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
 
     logger.error('Unable to reach the Brevo API', {
       to: recipient,
+      purpose,
       durationMs,
       reason: timedOut
         ? `request timed out after ${REQUEST_TIMEOUT_MS} ms`
@@ -245,4 +218,97 @@ export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
 
     return false;
   }
+};
+
+export const sendPasswordResetEmail = async (targetEmail, resetUrl) => {
+  const safeUrl = escapeHtml(resetUrl);
+
+  return sendBrevoEmail({
+    to: targetEmail,
+    purpose: 'password-reset',
+    subject: '[To-Do App] Відновлення пароля',
+    textContent: [
+      'Ви отримали цей лист, бо хтось запросив відновлення пароля для вашого акаунту в To-Do App.',
+      '',
+      'Перейдіть за посиланням, щоб встановити новий пароль (дійсне 1 годину):',
+      resetUrl,
+      '',
+      'Якщо ви не запитували відновлення — просто проігноруйте цей лист.',
+    ].join('\n'),
+    htmlContent: `
+      <div style="background:#f4f7fb;padding:40px 16px;font-family:Arial,sans-serif;color:#172033">
+        <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(23,32,51,.08)">
+          <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:18px">
+            To-Do App
+          </div>
+          <h1 style="font-size:22px;margin:0 0 12px;color:#0f172a">Відновлення пароля</h1>
+          <p style="font-size:16px;line-height:1.6;margin:0 0 24px;color:#526078">
+            Натисніть кнопку нижче, щоб встановити новий пароль. Посилання дійсне протягом <strong>1 години</strong>.
+          </p>
+          <a href="${safeUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:14px 22px;border-radius:12px">
+            Встановити новий пароль
+          </a>
+          <p style="font-size:13px;line-height:1.6;margin:24px 0 0;color:#94a3b8;word-break:break-all">
+            Якщо кнопка не працює, скопіюйте посилання:<br />
+            ${safeUrl}
+          </p>
+          <p style="font-size:13px;line-height:1.6;margin:18px 0 0;color:#94a3b8">
+            Якщо ви не запитували відновлення — проігноруйте цей лист.
+          </p>
+        </div>
+      </div>
+    `,
+  });
+};
+
+export const sendTaskShareEmail = async (targetEmail, tasks, senderEmail) => {
+  const taskList = Array.isArray(tasks) ? tasks : [tasks];
+  const recipient = maskEmail(targetEmail);
+
+  if (!taskList.length) {
+    logger.warn('Email skipped: empty task list', { to: recipient });
+    return false;
+  }
+
+  const safeSenderEmail = escapeHtml(senderEmail);
+  const taskCount = taskList.length;
+  const subject =
+    taskCount === 1
+      ? `[To-Do App] З вами поділилися задачею: "${taskList[0].title}"`
+      : `[To-Do App] З вами поділилися задачами (${taskCount})`;
+
+  const introText =
+    taskCount === 1
+      ? `Користувач ${senderEmail} поділився(-лася) з вами задачею.`
+      : `Користувач ${senderEmail} поділився(-лася) з вами ${taskCount} задачами.`;
+
+  const introHtml =
+    taskCount === 1
+      ? `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами задачею.`
+      : `Користувач <strong>${safeSenderEmail}</strong> поділився(-лася) з вами <strong>${taskCount}</strong> задачами.`;
+
+  return sendBrevoEmail({
+    to: targetEmail,
+    purpose: 'task-share',
+    replyTo: senderEmail,
+    subject,
+    textContent: [
+      introText,
+      '',
+      ...taskList.map((task, index) => renderTaskText(task, index)),
+    ].join('\n'),
+    htmlContent: `
+        <div style="background:#f4f7fb;padding:40px 16px;font-family:Arial,sans-serif;color:#172033">
+          <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 8px 30px rgba(23,32,51,.08)">
+            <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7c3aed;margin-bottom:18px">
+              To-Do App
+            </div>
+            <p style="font-size:16px;line-height:1.6;margin:0 0 24px;color:#526078">
+              ${introHtml}
+            </p>
+            ${taskList.map((task) => renderTaskHtml(task)).join('')}
+          </div>
+        </div>
+      `,
+  });
 };

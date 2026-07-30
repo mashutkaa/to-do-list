@@ -9,6 +9,8 @@ import {
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -41,6 +43,22 @@ function AnimatedRoutes() {
           element={
             <PublicOnlyRoute>
               <AuthPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/auth/forgot-password"
+          element={
+            <PublicOnlyRoute>
+              <ForgotPasswordPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/auth/reset-password"
+          element={
+            <PublicOnlyRoute>
+              <ResetPasswordPage />
             </PublicOnlyRoute>
           }
         />

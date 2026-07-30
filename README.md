@@ -78,6 +78,7 @@ JWT_SECRET="довгий-випадковий-секрет"
 JWT_EXPIRES_IN="7d"
 PORT=5000
 CORS_ORIGIN="http://localhost:5173"
+FRONTEND_URL="http://localhost:5173"
 NODE_ENV="development"
 
 BREVO_API_KEY="your-brevo-api-key"
@@ -87,7 +88,8 @@ MAIL_FROM_NAME="To-Do List"
 
 > Листи йдуть через HTTPS API Brevo, а не SMTP: більшість хостингів блокує вихідні порти
 > 25/465/587, через що SMTP-з'єднання зависає до тайм-ауту. `MAIL_FROM_EMAIL` має бути
-> підтвердженим відправником у Brevo.
+> підтвердженим відправником у Brevo. `FRONTEND_URL` використовується в посиланні
+> відновлення пароля (fallback — `CORS_ORIGIN`).
 
 Застосуйте схему до БД і запустіть сервер:
 
@@ -133,6 +135,8 @@ npm run dev
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Реєстрація (`name`, `email`, `password`) |
 | `POST` | `/api/auth/login` | Вхід → JWT + профіль користувача |
+| `POST` | `/api/auth/forgot-password` | Запит на відновлення пароля (`email`) |
+| `POST` | `/api/auth/reset-password` | Новий пароль за токеном з листа (`token`, `password`) |
 | `GET` | `/api/tasks` | Список задач користувача |
 | `POST` | `/api/tasks` | Створити задачу |
 | `PATCH` | `/api/tasks/:id` | Оновити задачу |

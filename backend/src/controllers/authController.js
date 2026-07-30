@@ -1,4 +1,9 @@
-import { loginUser, registerUser } from '../services/authService.js';
+import {
+  loginUser,
+  registerUser,
+  requestPasswordReset,
+  resetPasswordWithToken,
+} from '../services/authService.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -69,5 +74,49 @@ export const login = async (request, response) => {
     return response
       .status(500)
       .json({ message: 'Не вдалося увійти. Спробуйте пізніше' });
+  }
+};
+
+export const forgotPassword = async (request, response) => {
+  try {
+    const { email } = request.body;
+
+    if (typeof email !== 'string' || !EMAIL_PATTERN.test(email.trim())) {
+      throw createValidationError('Введіть коректний email');
+    }
+
+    const result = await requestPasswordReset(email);
+    return response.status(200).json(result);
+  } catch (error) {
+    if (error.isOperational) {
+      return response.status(error.statusCode).json({ message: error.message });
+    }
+
+    console.error('Forgot password failed:', error);
+    return response.status(500).json({
+      message: 'Не вдалося надіслати лист для відновлення. Спробуйте пізніше',
+    });
+  }
+};
+
+export const resetPassword = async (request, response) => {
+  try {
+    const { token, password } = request.body;
+
+    if (typeof password !== 'string' || password.length < 6) {
+      throw createValidationError('Пароль має містити щонайменше 6 символів');
+    }
+
+    const authData = await resetPasswordWithToken(token, password);
+    return response.status(200).json(authData);
+  } catch (error) {
+    if (error.isOperational) {
+      return response.status(error.statusCode).json({ message: error.message });
+    }
+
+    console.error('Reset password failed:', error);
+    return response.status(500).json({
+      message: 'Не вдалося оновити пароль. Спробуйте пізніше',
+    });
   }
 };

@@ -7,6 +7,13 @@ if (!process.env.JWT_SECRET) {
 
 jest.unstable_mockModule('../src/services/mailService.js', () => ({
   sendTaskShareEmail: jest.fn().mockResolvedValue(true),
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(true),
+  describeMailConfig: jest.fn().mockReturnValue({
+    apiKeyPresent: true,
+    apiKeyLength: 10,
+    sender: 'se****@example.com',
+    ready: true,
+  }),
 }));
 
 const { default: request } = await import('supertest');

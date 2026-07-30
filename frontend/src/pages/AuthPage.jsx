@@ -1,6 +1,6 @@
 import { AlertCircle, ArrowRight, Eye, EyeOff, ListChecks } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../services/api.js';
@@ -363,6 +363,17 @@ export default function AuthPage() {
               )
             )}
           </label>
+
+          {isLogin && (
+            <div className="-mt-1 flex justify-end">
+              <Link
+                to="/auth/forgot-password"
+                className="cursor-pointer text-sm font-semibold text-primary underline-offset-2 transition hover:text-primary-hover hover:underline"
+              >
+                Забули пароль?
+              </Link>
+            </div>
+          )}
 
           {error && (
             <div

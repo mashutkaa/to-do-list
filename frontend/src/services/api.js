@@ -8,7 +8,10 @@ const api = axios.create({
 });
 
 const isAuthEndpoint = (url = '') =>
-  url.includes('/auth/login') || url.includes('/auth/register');
+  url.includes('/auth/login') ||
+  url.includes('/auth/register') ||
+  url.includes('/auth/forgot-password') ||
+  url.includes('/auth/reset-password');
 
 api.interceptors.request.use(
   (config) => {
